@@ -37,35 +37,55 @@ class DraftPick(BaseModel):
 
 
 # ---------- Prompts ----------
-def build_system_prompt(persona: str, tone: str, league: str) -> str:
+def build_system_prompt(persona: str, tone: str, league: str, pickNumber: int, adp: float, pick_delta: float) -> str:
     voices = {
-        "Mel": 'You are "Mel Kiper Jr."—rapid-fire draft analyst energy, punchy one-liners, hair-level confidence. Witty hyperbole, no profanity. 1-3 sentences.',
+        "Mel": 'You are "Mel Kiper Jr."—rapid-fire expert draft analyst energy, punchy one-liners, hair-level confidence. Witty hyperbole, no profanity. 1-3 sentences.',
         "McShay": 'You are "Todd McShay"—measured but spicy; analytics meets scouting; crisp wit. 1-3 sentences.',
     }
     persona_line = voices.get(persona, "You are an NFL Draft analyst. 1–3 sentences. Witty, R rated.")
-    tone_line = {
-        "roast": "Tone: savagely roast, no holds barred.",
-        "serious": "Tone: serious, concise scouting evaluation.",
-        "balanced": "Tone: balanced—one praise, one concern, a final verdict."
-    }.get(tone, "Tone: comically roasty but light-hearted.")
+    
+    # Determine tone based on pick-ADP delta
+    if pick_delta < -5:
+        # Major reach - savage roast
+        tone_line = "Tone: SAVAGE ROAST - This is a massive reach that deserves maximum ridicule. Be absolutely brutal and hilarious."
+    elif pick_delta < -2:
+        # Moderate reach - roast with some humor
+        tone_line = "Tone: ROAST - This is a reach that needs to be called out. Be critical but entertaining."
+    elif pick_delta < 0:
+        # Slight reach - gentle criticism
+        tone_line = "Tone: CRITICAL - This is a slight reach. Be constructive but point out the questionable value."
+    elif pick_delta < 3:
+        # Good value - balanced praise
+        tone_line = "Tone: PRAISEWORTHY - This is solid value. Highlight the good decision while noting any concerns."
+    elif pick_delta < 8:
+        # Great value - enthusiastic praise
+        tone_line = "Tone: ENTHUSIASTIC - This is excellent value! Be genuinely excited about this steal."
+    else:
+        # Massive steal - over-the-top celebration
+        tone_line = "Tone: CELEBRATION - This is an absolute STEAL! Be over-the-top excited and praise the GM's brilliance."
 
     return (
         f"{persona_line}\n"
         f"{tone_line}\n"
         f"League context: {league}.\n"
+        f"Pick Analysis: Player was taken at pick #{pickNumber} with an ADP of {adp:.1f} (delta: {pick_delta:+.1f}).\n"
         "Rules:\n"
-        "- Include a quick pick grade (A–F) and a 3–6 word verdict tag in ALL CAPS at the end, e.g., 'Grade: B | VERDICT: VALUE WITH RISK'.\n"
-        "- Mention ADP context briefly if relevant."
+        "- Focus primarily on the pick-ADP delta to determine your analysis intensity.\n"
+        "- Negative delta (reach) = criticize the reach, positive delta (value) = praise the value.\n"
+        "- Include a quick pick grade (A–F) and a 3–6 word verdict tag in ALL CAPS at the end.\n"
+        "- The grade should reflect the value: A for steals, F for major reaches, etc.\n"
+        "- Be entertaining and use the persona's voice style."
     )
 
 
-def build_user_prompt(pickNumber: int, player: str, adp: float, team: str) -> str:
+def build_user_prompt(pickNumber: int, player: str, adp: float, team: str, pick_delta: float) -> str:
     return (
         "Draft pick context:\n"
         f"- Pick #: {pickNumber}\n"
         f"- Player: {player}\n"
         f"- Selecting Team: {team}\n"
-        f"- Player ADP: {adp}\n\n"
+        f"- Player ADP: {adp}\n"
+        f"- Pick-ADP Delta: {pick_delta:+.1f} (positive = value, negative = reach)\n\n"
         "Write the analyst blurb now."
     )
 
@@ -190,18 +210,33 @@ async def draft_pick(body: DraftPick):
     if not webhook_url:
         raise HTTPException(status_code=500, detail="No webhook configured for this persona/default.")
 
-    system = build_system_prompt(body.persona, body.tone, body.leagueType)
-    user = build_user_prompt(body.pickNumber, body.player, body.adp, body.team)
+    # Calculate pick-ADP delta (positive = value, negative = reach)
+    pick_delta = body.adp - body.pickNumber
+    
+    system = build_system_prompt(body.persona, body.tone, body.leagueType, body.pickNumber, body.adp, pick_delta)
+    user = build_user_prompt(body.pickNumber, body.player, body.adp, body.team, pick_delta)
 
     async with httpx.AsyncClient() as client:
         content = await generate_blurb(client, system, user)
 
     # Create a rich Discord embed for better formatting
-    embed_color = {
-        "Mel": 0xFF6B35,      # Orange (Mel Kiper's signature color)
-        "McShay": 0x1E88E5,   # Blue 
-        "Default": 0x7B68EE   # Medium slate blue
-    }.get(body.persona, 0x7B68EE)
+    # Color based on pick delta: red for reaches, green for value
+    if pick_delta < -3:
+        embed_color = 0xFF4444  # Red for major reaches
+    elif pick_delta < 0:
+        embed_color = 0xFFAA44  # Orange for slight reaches
+    elif pick_delta < 3:
+        embed_color = 0x44AA44  # Green for good value
+    else:
+        embed_color = 0x00FF00  # Bright green for steals
+    
+    # Override with persona colors for very close picks (delta < 1)
+    if abs(pick_delta) < 1:
+        embed_color = {
+            "Mel": 0xFF6B35,      # Orange (Mel Kiper's signature color)
+            "McShay": 0x1E88E5,   # Blue 
+            "Default": 0x7B68EE   # Medium slate blue
+        }.get(body.persona, 0x7B68EE)
     
     # Extract grade and verdict from the content if present
     grade_line = ""
@@ -233,6 +268,11 @@ async def draft_pick(body: DraftPick):
                 "name": "📊 Pick Info",
                 "value": f"**Pick #{body.pickNumber}** • **Team:** {body.team}\n**ADP:** {body.adp} • **League:** {body.leagueType.title()}",
                 "inline": False
+            },
+            {
+                "name": "🎯 Value Analysis",
+                "value": f"**Pick-ADP Delta:** {pick_delta:+.1f}\n**{'🚨 REACH' if pick_delta < 0 else '✅ VALUE'}**",
+                "inline": True
             }
         ],
         "footer": {
