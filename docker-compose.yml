@@ -1,0 +1,29 @@
+# Fantasy Roast Bot Docker Compose Configuration
+
+services:
+  fantasy-roast-bot:
+    build: .
+    container_name: fantasy-roast-bot
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DISCORD_WEBHOOK_MEL=${DISCORD_WEBHOOK_MEL}
+      - DISCORD_WEBHOOK_TODD=${DISCORD_WEBHOOK_TODD}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - MAX_TOKENS=${MAX_TOKENS:-280}
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - fantasy-bot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  fantasy-bot-network:
+    driver: bridge

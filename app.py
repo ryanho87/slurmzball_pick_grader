@@ -25,6 +25,10 @@ if not OPENAI_API_KEY:
 
 app = FastAPI(title="Fantasy Roast Bot (Python)")
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": "2024-01-19T00:00:00Z"}
+
 # ---------- Schemas ----------
 class DraftPick(BaseModel):
     pickNumber: int = Field(..., ge=1)
