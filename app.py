@@ -1,4 +1,5 @@
 import os
+import random
 from typing import Optional
 
 import httpx
@@ -28,40 +29,39 @@ app = FastAPI(title="Fantasy Roast Bot (Python)")
 class DraftPick(BaseModel):
     pickNumber: int = Field(..., ge=1)
     player: str
+    position: str = Field(..., description="Player position (QB, RB, WR, TE, etc.)")
     adp: float
     team: str
-    persona: Optional[str] = Field(default="Mel", pattern="^(Mel|Todd)$")      # "Mel" | "Todd"
-    tone: Optional[str] = Field(default="roast")       # "roast" | "serious" | "balanced"
     leagueType: Optional[str] = Field(default="redraft")  # "redraft" | "dynasty" | "best ball"
 
 
 # ---------- Prompts ----------
 def build_system_prompt(persona: str, tone: str, league: str, pickNumber: int, adp: float, pick_delta: float) -> str:
     voices = {
-        "Mel": 'You are "Mel Kiper Jr."—rapid-fire expert draft analyst energy, punchy one-liners, hair-level confidence. Witty hyperbole, no profanity. 1-3 sentences.',
-        "Todd": 'You are "Todd McShay"—measured but spicy; analytics meets scouting; crisp wit. 1-3 sentences.',
+        "Mel": 'You are "Mel Kiper Jr."—rapid-fire expert draft analyst energy, punchy one-liners, hair-level confidence. Witty hyperbole, R-rated language welcome. 1-2 sentences.',
+        "Todd": 'You are "Todd McShay"—measured but spicy; analytics meets scouting; crisp wit with some edge. 1-2 sentences.',
     }
-    persona_line = voices.get(persona, "You are an NFL Draft analyst. 1–3 sentences. Witty, R rated.")
+    persona_line = voices.get(persona, "You are an NFL Draft analyst. 1–2 sentences. Witty, R rated.")
     
     # Determine tone based on pick-ADP delta
     if pick_delta < -5:
-        # Major reach - savage roast
-        tone_line = "Tone: SAVAGE ROAST - This is a massive reach that deserves maximum ridicule. Be absolutely brutal and hilarious."
+        # Major reach - savage roast with profanity
+        tone_line = "Tone: SAVAGE ROAST - This is a massive reach that deserves maximum ridicule. Be absolutely brutal, hilarious, and don't hold back on language. Use profanity if it makes the roast funnier."
     elif pick_delta < -2:
         # Moderate reach - roast with some humor
-        tone_line = "Tone: ROAST - This is a reach that needs to be called out. Be critical but entertaining."
+        tone_line = "Tone: ROAST - This is a reach that needs to be called out. Be critical, entertaining, and feel free to use some profanity for emphasis."
     elif pick_delta < 0:
         # Slight reach - gentle criticism
-        tone_line = "Tone: CRITICAL - This is a slight reach. Be constructive but point out the questionable value."
+        tone_line = "Tone: CRITICAL - This is a slight reach. Be constructive but point out the questionable value. Light profanity okay if it fits."
     elif pick_delta < 3:
         # Good value - balanced praise
-        tone_line = "Tone: PRAISEWORTHY - This is solid value. Highlight the good decision while noting any concerns."
+        tone_line = "Tone: PRAISEWORTHY - This is solid value. Highlight the good decision while noting any concerns. Keep it clean but enthusiastic."
     elif pick_delta < 8:
         # Great value - enthusiastic praise
-        tone_line = "Tone: ENTHUSIASTIC - This is excellent value! Be genuinely excited about this steal."
+        tone_line = "Tone: ENTHUSIASTIC - This is excellent value! Be genuinely excited about this steal. Clean language, pure celebration."
     else:
         # Massive steal - over-the-top celebration
-        tone_line = "Tone: CELEBRATION - This is an absolute STEAL! Be over-the-top excited and praise the GM's brilliance."
+        tone_line = "Tone: CELEBRATION - This is an absolute STEAL! Be over-the-top excited and praise the GM's brilliance. Clean, pure joy."
 
     return (
         f"{persona_line}\n"
@@ -73,7 +73,9 @@ def build_system_prompt(persona: str, tone: str, league: str, pickNumber: int, a
         "- Negative delta (reach) = criticize the reach, positive delta (value) = praise the value.\n"
         "- Include a quick pick grade (A–F) and a 3–6 word verdict tag in ALL CAPS at the end.\n"
         "- The grade should reflect the value: A for steals, F for major reaches, etc.\n"
-        "- Be entertaining and use the persona's voice style."
+        "- Be entertaining and use the persona's voice style.\n"
+        "- For reaches: Don't hold back on language - use profanity if it makes the roast funnier and more savage.\n"
+        "- For value picks: Keep it clean and celebratory."
     )
 
 
@@ -198,23 +200,175 @@ async def post_to_discord_with_retry(client: httpx.AsyncClient, url: str, payloa
 # ---------- Endpoint ----------
 @app.post("/draft-pick")
 async def draft_pick(body: DraftPick):
-    # Get webhook URL for the specified persona
-    webhook_url = WEBHOOKS.get(body.persona)
-    
-    if not webhook_url:
-        raise HTTPException(status_code=500, detail=f"No webhook configured for persona '{body.persona}'. Available personas: {', '.join(WEBHOOKS.keys())}")
-
     # Calculate pick-ADP delta (positive = value, negative = reach)
     pick_delta = body.pickNumber - body.adp
     
-    system = build_system_prompt(body.persona, body.tone, body.leagueType, body.pickNumber, body.adp, pick_delta)
+    # DECISION LOGIC: Should any bot respond to this pick?
+    should_respond = False
+    chosen_persona = None
+    
+    # 1. MEL ALWAYS RESPONDS TO QB PICKS (Shedeur meltdown priority)
+    if body.position.upper() == "QB":
+        should_respond = True
+        chosen_persona = "Mel"
+    
+    # 2. RANDOM RESPONSES FOR OTHER POSITIONS (not every pick needs a response)
+    elif random.random() < 0.4:  # 40% chance of response for non-QB picks
+        should_respond = True
+        # Choose persona based on pick quality
+        if pick_delta < -3:
+            chosen_persona = "Mel"  # Mel for savage roasts
+        elif pick_delta > 3:
+            chosen_persona = "Todd"  # Todd for value analysis
+        else:
+            chosen_persona = random.choice(["Mel", "Todd"])  # Random for close picks
+    
+    # If no bot should respond, return early
+    if not should_respond:
+        return {"ok": True, "responded": False, "reason": "No bot response needed for this pick"}
+    
+    # Get webhook URL for the chosen persona
+    webhook_url = WEBHOOKS.get(chosen_persona)
+    
+    if not webhook_url:
+        raise HTTPException(status_code=500, detail=f"No webhook configured for persona '{chosen_persona}'. Available personas: {', '.join(WEBHOOKS.keys())}")
+    
+    # Build prompts for the chosen persona
+    system = build_system_prompt(chosen_persona, "roast", body.leagueType, body.pickNumber, body.adp, pick_delta)
     user = build_user_prompt(body.pickNumber, body.player, body.adp, body.team, pick_delta)
 
-    async with httpx.AsyncClient() as client:
-        content = await generate_blurb(client, system, user)
+    # Sometimes use short gut reactions for maximum impact
+    
+    # Check if this is a QB pick that's not Shedeur Sanders
+    is_qb_pick = body.position.upper() == "QB"
+    is_shedeur = "shedeur" in body.player.lower() or "sanders" in body.player.lower()
+    
+    # Mel Kiper Jr. Shedeur Sanders meltdown reactions
+    mel_shedeur_meltdown = [
+        "WHERE IS SHEDEUR SANDERS?!",
+        "I CANNOT BELIEVE SHEDEUR IS STILL ON THE BOARD!",
+        "This is a DISASTER! Shedeur Sanders should have been taken 10 picks ago!",
+        "I'm having a MELTDOWN! Shedeur Sanders is the best QB in this draft!",
+        "This is why the NFL is BROKEN! Shedeur Sanders is being IGNORED!",
+        "I'm going to LOSE MY MIND if Shedeur doesn't get drafted soon!",
+        "This is the WORST DRAFT I've ever seen! Where is Shedeur?!",
+        "I'm literally SHAKING! Shedeur Sanders is a generational talent!",
+        "This is INSANITY! Shedeur Sanders is being ROBBED!",
+        "I'm about to have a BREAKDOWN! Shedeur Sanders is the answer!",
+        "This is CRIMINAL! Shedeur Sanders should be the #1 pick!",
+        "I'm LOSING IT! Shedeur Sanders is the most NFL-ready QB!",
+        "This is EMBARRASSING! Shedeur Sanders is being DISRESPECTED!",
+        "I'm going to QUIT if Shedeur doesn't get drafted!",
+        "This is a TRAVESTY! Shedeur Sanders is the future of the NFL!"
+    ]
+    
+    # Short reactions for reaches (negative deltas)
+    short_reactions = [
+        "Terrible pick",
+        "I don't love this",
+        "I saw him going later",
+        "Unbelievable",
+        "Could have done better",
+        "That pick was absolute garbage",
+        "We should have seen this one coming, this manager is an absolute joke",
+        "Hate it",
+        "That pick was inexcusable",
+        "That might be the worst pick I've ever seen",
+        "What a reach",
+        "Are you kidding me?",
+        "This is why you don't win championships",
+        "Fire the GM immediately",
+        "I'm speechless",
+        "This pick physically hurts me",
+        "Someone call the police, this is a crime",
+        "I need to lie down after this pick",
+        "This is peak comedy",
+        "I'm actually laughing at how bad this is"
+    ]
+    
+    # Short reactions for value picks (positive deltas)
+    value_reactions = [
+        "Great value!",
+        "Love this pick",
+        "Steal of the draft",
+        "Someone's getting fired for letting this happen",
+        "This is how you draft",
+        "Absolute robbery",
+        "I'm impressed",
+        "This manager knows what they're doing",
+        "Beautiful pick",
+        "This is why you win championships",
+        "Someone's going to regret this",
+        "I'm taking notes",
+        "This is draft mastery",
+        "I'm actually jealous",
+        "This is how you build a dynasty"
+    ]
+    
+    # Determine if we should use a short reaction
+    use_short_reaction = False
+    
+    # MEL'S SHEDEUR MELTDOWN PRIORITY - If it's Mel and a QB pick, he's losing it
+    if chosen_persona == "Mel" and is_qb_pick and not is_shedeur:
+        # Mel is having a meltdown about Shedeur not being drafted
+        content = random.choice(mel_shedeur_meltdown)
+        use_short_reaction = True  # Mark as used so we don't generate AI content
+    else:
+        # Normal probability logic for other cases
+        if pick_delta < -5:
+            # Major reaches: 40% chance of short reaction
+            use_short_reaction = random.random() < 0.4
+        elif pick_delta < -2:
+            # Moderate reaches: 30% chance of short reaction
+            use_short_reaction = random.random() < 0.3
+        elif pick_delta < 0:
+            # Slight reaches: 20% chance of short reaction
+            use_short_reaction = random.random() < 0.2
+        elif pick_delta > 5:
+            # Major steals: 25% chance of short reaction
+            use_short_reaction = random.random() < 0.25
+        elif pick_delta > 2:
+            # Good value: 15% chance of short reaction
+            use_short_reaction = random.random() < 0.15
+        
+        if use_short_reaction:
+            if pick_delta < 0:
+                # Use reach reactions
+                content = random.choice(short_reactions)
+            else:
+                # Use value reactions
+                content = random.choice(value_reactions)
+    
+    if not use_short_reaction:
+        # Generate full AI analysis
+        async with httpx.AsyncClient() as client:
+            content = await generate_blurb(client, system, user)
 
-    # Simple message with just the blurb content
-    payload = {"content": content}
+    # Create a simple colored embed that looks like a user message
+    # Color based on pick delta: red for reaches, green for value
+    if pick_delta < -3:
+        embed_color = 0xFF4444  # Red for major reaches
+    elif pick_delta < 0:
+        embed_color = 0xFFAA44  # Orange for slight reaches
+    elif pick_delta < 3:
+        embed_color = 0x44AA44  # Green for good value
+    else:
+        embed_color = 0x00FF00  # Bright green for steals
+    
+    # Override with persona colors for very close picks (delta < 1)
+    if abs(pick_delta) < 1:
+        embed_color = {
+            "Mel": 0xFF6B35,      # Orange (Mel Kiper's signature color)
+            "Todd": 0x1E88E5,   # Blue 
+        }.get(chosen_persona, 0x7B68EE)
+    
+    # Simple embed with just the content and color - looks like a user message
+    embed = {
+        "description": content,
+        "color": embed_color
+    }
+
+    payload = {"embeds": [embed]}
 
     async with httpx.AsyncClient() as client:
         dr = await post_to_discord_with_retry(client, webhook_url, payload)
@@ -222,4 +376,4 @@ async def draft_pick(body: DraftPick):
     if not dr.is_success:
         raise HTTPException(status_code=502, detail=f"Discord post failed: {dr.text}")
 
-    return {"ok": True, "persona": body.persona, "posted": True}
+    return {"ok": True, "responded": True, "persona": chosen_persona, "posted": True}
