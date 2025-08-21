@@ -13,8 +13,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 WEBHOOKS = {
     "Mel": os.getenv("DISCORD_WEBHOOK_MEL"),
-    "McShay": os.getenv("DISCORD_WEBHOOK_MCSHAY"),
-    "Default": os.getenv("DISCORD_WEBHOOK_DEFAULT"),
+    "Todd": os.getenv("DISCORD_WEBHOOK_TODD"),
 }
 
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -31,7 +30,7 @@ class DraftPick(BaseModel):
     player: str
     adp: float
     team: str
-    persona: Optional[str] = Field(default="Mel")      # "Mel" | "McShay" | etc.
+    persona: Optional[str] = Field(default="Mel", pattern="^(Mel|Todd)$")      # "Mel" | "Todd"
     tone: Optional[str] = Field(default="roast")       # "roast" | "serious" | "balanced"
     leagueType: Optional[str] = Field(default="redraft")  # "redraft" | "dynasty" | "best ball"
 
@@ -40,7 +39,7 @@ class DraftPick(BaseModel):
 def build_system_prompt(persona: str, tone: str, league: str, pickNumber: int, adp: float, pick_delta: float) -> str:
     voices = {
         "Mel": 'You are "Mel Kiper Jr."—rapid-fire expert draft analyst energy, punchy one-liners, hair-level confidence. Witty hyperbole, no profanity. 1-3 sentences.',
-        "McShay": 'You are "Todd McShay"—measured but spicy; analytics meets scouting; crisp wit. 1-3 sentences.',
+        "Todd": 'You are "Todd McShay"—measured but spicy; analytics meets scouting; crisp wit. 1-3 sentences.',
     }
     persona_line = voices.get(persona, "You are an NFL Draft analyst. 1–3 sentences. Witty, R rated.")
     
@@ -199,19 +198,14 @@ async def post_to_discord_with_retry(client: httpx.AsyncClient, url: str, payloa
 # ---------- Endpoint ----------
 @app.post("/draft-pick")
 async def draft_pick(body: DraftPick):
-    # Get webhook URL, with fallback logic
+    # Get webhook URL for the specified persona
     webhook_url = WEBHOOKS.get(body.persona)
-    if not webhook_url or webhook_url == "https://discord.com/api/webhooks/...":
-        # Fallback to Default if persona webhook is missing or incomplete
-        webhook_url = WEBHOOKS.get("Default")
-        if body.persona != "Default":
-            print(f"Warning: Using Default webhook for {body.persona} (persona webhook incomplete)")
     
     if not webhook_url:
-        raise HTTPException(status_code=500, detail="No webhook configured for this persona/default.")
+        raise HTTPException(status_code=500, detail=f"No webhook configured for persona '{body.persona}'. Available personas: {', '.join(WEBHOOKS.keys())}")
 
     # Calculate pick-ADP delta (positive = value, negative = reach)
-    pick_delta = body.adp - body.pickNumber
+    pick_delta = body.pickNumber - body.adp
     
     system = build_system_prompt(body.persona, body.tone, body.leagueType, body.pickNumber, body.adp, pick_delta)
     user = build_user_prompt(body.pickNumber, body.player, body.adp, body.team, pick_delta)
@@ -219,86 +213,8 @@ async def draft_pick(body: DraftPick):
     async with httpx.AsyncClient() as client:
         content = await generate_blurb(client, system, user)
 
-    # Create a rich Discord embed for better formatting
-    # Color based on pick delta: red for reaches, green for value
-    if pick_delta < -3:
-        embed_color = 0xFF4444  # Red for major reaches
-    elif pick_delta < 0:
-        embed_color = 0xFFAA44  # Orange for slight reaches
-    elif pick_delta < 3:
-        embed_color = 0x44AA44  # Green for good value
-    else:
-        embed_color = 0x00FF00  # Bright green for steals
-    
-    # Override with persona colors for very close picks (delta < 1)
-    if abs(pick_delta) < 1:
-        embed_color = {
-            "Mel": 0xFF6B35,      # Orange (Mel Kiper's signature color)
-            "McShay": 0x1E88E5,   # Blue 
-            "Default": 0x7B68EE   # Medium slate blue
-        }.get(body.persona, 0x7B68EE)
-    
-    # Extract grade and verdict from the content if present
-    grade_line = ""
-    verdict_line = ""
-    main_content = content
-    
-    # Look for Grade: and VERDICT: patterns
-    import re
-    grade_match = re.search(r'Grade:\s*([A-F][+-]?)', content, re.IGNORECASE)
-    verdict_match = re.search(r'VERDICT:\s*([A-Z\s]+)', content, re.IGNORECASE)
-    
-    if grade_match:
-        grade_line = grade_match.group(1)
-        main_content = re.sub(r'Grade:\s*[A-F][+-]?\s*\|?\s*', '', main_content, flags=re.IGNORECASE)
-    
-    if verdict_match:
-        verdict_line = verdict_match.group(1).strip()
-        main_content = re.sub(r'\|\s*VERDICT:\s*[A-Z\s]+', '', main_content, flags=re.IGNORECASE)
-    
-    # Clean up any remaining formatting artifacts
-    main_content = main_content.strip()
-    
-    embed = {
-        "title": f"🏈 Draft Analysis: {body.player}",
-        "description": main_content,
-        "color": embed_color,
-        "fields": [
-            {
-                "name": "📊 Pick Info",
-                "value": f"**Pick #{body.pickNumber}** • **Team:** {body.team}\n**ADP:** {body.adp} • **League:** {body.leagueType.title()}",
-                "inline": False
-            },
-            {
-                "name": "🎯 Value Analysis",
-                "value": f"**Pick-ADP Delta:** {pick_delta:+.1f}\n**{'🚨 REACH' if pick_delta < 0 else '✅ VALUE'}**",
-                "inline": True
-            }
-        ],
-        "footer": {
-            "text": f"Analysis by {body.persona} • {body.tone.title()} tone"
-        },
-        "timestamp": None  # Discord will use current time
-    }
-    
-    # Add grade and verdict as separate fields if found
-    if grade_line or verdict_line:
-        grade_verdict_value = ""
-        if grade_line:
-            grade_verdict_value += f"**Grade:** {grade_line}"
-        if verdict_line:
-            if grade_verdict_value:
-                grade_verdict_value += f"\n**Verdict:** {verdict_line}"
-            else:
-                grade_verdict_value += f"**Verdict:** {verdict_line}"
-        
-        embed["fields"].append({
-            "name": "📈 Final Assessment",
-            "value": grade_verdict_value,
-            "inline": True
-        })
-
-    payload = {"embeds": [embed]}
+    # Simple message with just the blurb content
+    payload = {"content": content}
 
     async with httpx.AsyncClient() as client:
         dr = await post_to_discord_with_retry(client, webhook_url, payload)
