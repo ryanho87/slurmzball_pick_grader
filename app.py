@@ -36,11 +36,10 @@ class DraftPick(BaseModel):
     position: str = Field(..., description="Player position (QB, RB, WR, TE, etc.)")
     adp: float
     team: str
-    leagueType: Optional[str] = Field(default="redraft")  # "redraft" | "dynasty" | "best ball"
 
 
 # ---------- Prompts ----------
-def build_system_prompt(persona: str, tone: str, league: str, pickNumber: int, adp: float, pick_delta: float) -> str:
+def build_system_prompt(persona: str, tone: str, pickNumber: int, adp: float, pick_delta: float) -> str:
     voices = {
         "Mel": 'You are "Mel Kiper Jr."—rapid-fire expert draft analyst energy, punchy one-liners, hair-level confidence. Witty hyperbole, R-rated language welcome. 1-2 sentences.',
         "Todd": 'You are "Todd McShay"—measured but spicy; analytics meets scouting; crisp wit with some edge. 1-2 sentences.',
@@ -70,7 +69,7 @@ def build_system_prompt(persona: str, tone: str, league: str, pickNumber: int, a
     return (
         f"{persona_line}\n"
         f"{tone_line}\n"
-        f"League context: {league}.\n"
+
         f"Pick Analysis: Player was taken at pick #{pickNumber} with an ADP of {adp:.1f} (delta: {pick_delta:+.1f}).\n"
         "Rules:\n"
         "- Focus primarily on the pick-ADP delta to determine your analysis intensity.\n"
@@ -238,7 +237,7 @@ async def draft_pick(body: DraftPick):
         raise HTTPException(status_code=500, detail=f"No webhook configured for persona '{chosen_persona}'. Available personas: {', '.join(WEBHOOKS.keys())}")
     
     # Build prompts for the chosen persona
-    system = build_system_prompt(chosen_persona, "roast", body.leagueType, body.pickNumber, body.adp, pick_delta)
+    system = build_system_prompt(chosen_persona, "roast", body.pickNumber, body.adp, pick_delta)
     user = build_user_prompt(body.pickNumber, body.player, body.adp, body.team, pick_delta)
 
     # Sometimes use short gut reactions for maximum impact

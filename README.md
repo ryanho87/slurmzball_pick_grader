@@ -1,8 +1,8 @@
-# Fantasy Football Pick Grading Bot 🏈
+# 🏈 Fantasy Football Roast Bot
 
-An intelligent bot that analyzes fantasy football draft picks based on **pick-ADP delta** and generates entertaining analysis in the style of famous NFL draft analysts.
+An intelligent, Dockerized bot that automatically analyzes fantasy football draft picks and generates entertaining roasts in the style of famous NFL draft analysts. Features **automatic response logic**, **smart persona selection**, and **Mel Kiper Jr.'s legendary Shedeur Sanders meltdown** for every QB pick!
 
-## 🎯 **Smart Analysis Based on Value**
+## 🎯 **Smart Analysis Based on Pick-ADP Delta**
 
 The bot automatically determines the tone and intensity of analysis based on the **pick-ADP delta**:
 
@@ -18,44 +18,48 @@ The bot automatically determines the tone and intensity of analysis based on the
 
 ## 🎭 **Analyst Personas**
 
-- **Mel Kiper Jr.**: Rapid-fire, punchy, hair-level confidence
+- **Mel Kiper Jr.**: Rapid-fire, punchy, hair-level confidence with R-rated language
 - **Todd McShay**: Measured but spicy, analytics meets scouting
 
-## 🔧 **Requirements**
+## 🚀 **Quick Start with Docker**
 
+### **Prerequisites**
+- Docker and Docker Compose installed
 - OpenAI API key
 - Discord webhooks for Mel and Todd personas
-- Python 3.8+
 
-## 🚀 **Quick Start**
+### **Deployment**
+```bash
+# 1. Clone the repository
+git clone <your-repo-url>
+cd slurmzball_bot
 
-1. Create and activate Python virtual environment
-2. Install requirements: `pip install -r requirements.txt`
-3. Set up your `.env` file with:
-   - `OPENAI_API_KEY`: Your OpenAI API key
-   - `DISCORD_WEBHOOK_MEL`: Discord webhook for Mel Kiper Jr. persona
-   - `DISCORD_WEBHOOK_TODD`: Discord webhook for Todd McShay persona
-4. Start the app: `uvicorn app:app --host 0.0.0.0 --port 8000 --reload`
-5. Make requests to `http://localhost:8000/draft-pick`
+# 2. Configure environment
+cp env.template .env
+# Edit .env with your API keys and webhooks
+
+# 3. Deploy with one command
+./deploy.sh
+```
 
 ## 📝 **API Usage**
 
 **Endpoint:** `POST /draft-pick`
 
 **Request Body:**
-
+```json
 {
   "pickNumber": 14,        // When the player was drafted
   "player": "Najee Harris", // Player name
   "position": "RB",         // Player position (QB, RB, WR, TE, etc.)
   "adp": 28.4,             // Average Draft Position (ADP)
-  "team": "Ryan",          // Team/manager name
-  "leagueType": "redraft"  // League type: "redraft", "dynasty", "best ball"
+  "team": "Ryan"           // Team/manager name
 }
+```
 
 ## 🧮 **Pick-ADP Delta Calculation**
 
-The bot automatically calculates: **`pick_delta = ADP - pickNumber`**
+The bot automatically calculates: **`pick_delta = pickNumber - ADP`**
 
 - **Positive delta** = Good value (player taken later than expected)
 - **Negative delta** = Reach (player taken earlier than expected)
@@ -91,4 +95,45 @@ The bot generates rich Discord embeds with:
 - **Color-coded analysis**: Red for reaches, green for value
 - **Simple, clean appearance**: Looks like regular user messages
 - **Contextual colors**: Visual indicator of pick quality
+
+## 🐳 **Docker Deployment**
+
+### **Production Ready Features:**
+- **Health checks**: `/health` endpoint for monitoring
+- **Security**: Non-root user, network isolation
+- **Logging**: Structured container logs
+- **Scaling**: Easy horizontal scaling
+- **Updates**: Simple rollback and update process
+
+### **Deployment Commands:**
+```bash
+# Build and start
+docker-compose up --build -d
+
+# View logs
+docker-compose logs -f
+
+# Stop service
+docker-compose down
+
+# Check status
+docker-compose ps
+```
+
+## 🔒 **Security & Monitoring**
+
+- **Health endpoint**: `GET /health` for monitoring
+- **Container logs**: Real-time logging and debugging
+- **Environment variables**: Secure credential management
+- **Non-root user**: Container security best practices
+
+## 📚 **Documentation**
+
+- **`DEPLOYMENT.md`**: Comprehensive deployment guide
+- **`env.template`**: Environment variable template
+- **`deploy.sh`**: Automated deployment script
+
+---
+
+**🎉 Your Fantasy Roast Bot is now production-ready with Docker!**
 
