@@ -5,35 +5,67 @@
 - Docker installed on your server
 - Docker Compose installed
 - OpenAI API key
-- Discord webhook URLs for Mel and Todd personas
+- Discord webhook URLs for your chosen personas (Mel, Todd, AB)
 
 ## 🔧 Quick Deployment
 
 ### 1. **Clone and Setup**
 ```bash
 git clone <your-repo-url>
-cd slurmzball_bot
+cd slurmzball_pick_grader
 ```
 
-### 2. **Configure Environment**
+### 2. **Configure Your Leagues**
 ```bash
-# Copy the template
-cp env.template .env
+# Copy and edit the configuration templates
+cp config/base.yaml config/my-league.yaml
+cp config/secrets.yaml config/my-secrets.yaml
 
 # Edit with your actual values
+nano config/my-league.yaml    # Non-sensitive config
+nano config/my-secrets.yaml   # Sensitive info (API keys, webhooks)
+```
+
+**Required config/my-league.yaml contents:**
+```yaml
+leagues:
+  - name: myleague
+    prompts:
+      max_sentences: 2
+      response_probabilities:
+        qb_picks: 1.0
+        other_positions: 0.8
+```
+
+**Required config/my-secrets.yaml contents:**
+```yaml
+openai:
+  api_key: YOUR_OPENAI_API_KEY
+  model: gpt-4o-mini
+  max_tokens: 280
+
+leagues:
+  - name: myleague
+    mel: YOUR_DISCORD_WEBHOOK_URL
+    todd: YOUR_DISCORD_WEBHOOK_URL
+    ab: YOUR_DISCORD_WEBHOOK_URL
+```
+
+### 3. **Configure Environment (Optional)**
+```bash
+# Copy the template (optional fallback)
+cp env.template .env
+
+# Edit with your OpenAI API key (only if not using secrets.yaml)
 nano .env
 ```
 
-**Required .env contents:**
+**Optional .env contents (fallback only):**
 ```bash
-OPENAI_API_KEY=sk-your-actual-openai-key-here
-DISCORD_WEBHOOK_MEL=https://discord.com/api/webhooks/your_mel_webhook
-DISCORD_WEBHOOK_TODD=https://discord.com/api/webhooks/your_todd_webhook
-OPENAI_MODEL=gpt-4o-mini
-MAX_TOKENS=280
+OPENAI_API_KEY=YOUR_OPENAI_API_KEY
 ```
 
-### 3. **Deploy with Script**
+### 4. **Deploy with Script**
 ```bash
 ./deploy.sh
 ```
@@ -43,25 +75,25 @@ MAX_TOKENS=280
 ### **Build and Start**
 ```bash
 # Build the container
-docker-compose build
+docker compose build
 
 # Start the service
-docker-compose up -d
+docker compose up -d
 
 # Check status
-docker-compose ps
+docker compose ps
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### **Stop and Remove**
 ```bash
 # Stop the service
-docker-compose down
+docker compose down
 
 # Remove containers and images
-docker-compose down --rmi all
+docker compose down --rmi all
 ```
 
 ## 🌐 Production Deployment
@@ -73,7 +105,7 @@ server {
     server_name your-domain.com;
 
     location / {
-        proxy_pass http://localhost:8000;
+        proxy_pass http://localhost:32145;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -96,7 +128,7 @@ sudo certbot --nginx -d your-domain.com
 ### **Health Check**
 ```bash
 # Test health endpoint
-curl http://localhost:8000/health
+curl http://localhost:32145/health
 
 # Expected response: {"status": "healthy", "timestamp": "..."}
 ```
@@ -104,10 +136,10 @@ curl http://localhost:8000/health
 ### **Container Logs**
 ```bash
 # View real-time logs
-docker-compose logs -f
+docker compose logs -f
 
 # View last 100 lines
-docker-compose logs --tail=100
+docker compose logs --tail=100
 ```
 
 ### **Resource Usage**
@@ -132,26 +164,26 @@ docker system df
 ### **Container Won't Start**
 ```bash
 # Check logs
-docker-compose logs
+docker compose logs
 
-# Check environment variables
-docker-compose config
+# Check configuration
+docker compose config
 
 # Rebuild from scratch
-docker-compose down --rmi all
-docker-compose up --build
+docker compose down --rmi all
+docker compose up --build
 ```
 
 ### **API Not Responding**
 ```bash
 # Check if container is running
-docker-compose ps
+docker compose ps
 
 # Test health endpoint
-curl http://localhost:8000/health
+curl http://localhost:32145/health
 
 # Check port binding
-netstat -tlnp | grep 8000
+netstat -tlnp | grep 32145
 ```
 
 ### **Discord Webhook Issues**
@@ -167,13 +199,13 @@ curl -X POST YOUR_WEBHOOK_URL \
 ### **Multiple Instances**
 ```bash
 # Scale to multiple containers
-docker-compose up -d --scale fantasy-roast-bot=3
+docker compose up -d --scale fantasy-roast-bot=3
 ```
 
 ### **Load Balancer**
 ```nginx
 upstream fantasy_bots {
-    server localhost:8000;
+    server localhost:32145;
     server localhost:8001;
     server localhost:8002;
 }
@@ -202,10 +234,10 @@ git checkout HEAD~1
 ## 📞 Support
 
 If you encounter issues:
-1. Check the logs: `docker-compose logs -f`
-2. Verify environment variables: `docker-compose config`
-3. Test the health endpoint: `curl http://localhost:8000/health`
-4. Check container status: `docker-compose ps`
+1. Check the logs: `docker compose logs -f`
+2. Verify configuration: `docker compose config`
+3. Test the health endpoint: `curl http://localhost:32145/health`
+4. Check container status: `docker compose ps`
 
 ---
 
