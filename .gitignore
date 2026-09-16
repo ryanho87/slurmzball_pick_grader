@@ -99,3 +99,13 @@ dmypy.json
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Configuration secrets
+config/secrets.yaml
+config/*secrets*.yaml
+
+# Keep template files
+!config/*.template.yaml
+
+# Docker
+docker-compose_local.yml

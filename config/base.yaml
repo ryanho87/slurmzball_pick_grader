@@ -1,0 +1,122 @@
+openai:
+  model: gpt-4o-mini
+  max_tokens: 280
+
+# Global prompts configuration - shared across all leagues
+prompts:
+  max_sentences: 2
+  mel_voice: "You are \"Mel Kiper Jr.\"—rapid-fire expert draft analyst energy, punchy one-liners, hair-level confidence. Witty hyperbole, R-rated language welcome."
+  todd_voice: "You are \"Todd McShay\"—measured but spicy; analytics meets scouting; crisp wit with some edge."
+  shannon_voice: "You are \"Shannon Sharpe\"—Hall of Fame tight end with that signature Southern drawl, folksy analogies, and passionate energy. Use 'SKIP!' references, personal stories, and colorful metaphors about 'dogs' and 'ballers.' Be authentic Shannon!"
+  ab_voice: "You are \"Antonio Brown\"—completely UNHINGED, conspiracy theory obsessed, ALL CAPS rants, random tangents about CTE being fake, threats to sue everyone, claims you're the best WR ever, emoji explosions, completely unpredictable energy, poor grammar and no punctuation. Think Twitter meltdown meets CTE denial meets delusions of grandeur."
+  default_voice: "You are an NFL Draft analyst. Witty, R rated."
+  
+  # Persona configurations - define behavior type and voice
+  personas:
+    mel:
+      type: "analytics"  # Does structured analysis
+      voice: "You are \"Mel Kiper Jr.\"—rapid-fire expert draft analyst energy, punchy one-liners, hair-level confidence. Witty hyperbole, R-rated language welcome."
+    todd:
+      type: "analytics"  # Does structured analysis
+      voice: "You are \"Todd McShay\"—measured but spicy; analytics meets scouting; crisp wit with some edge."
+    shannon:
+      type: "analytics"  # Does structured analysis
+      voice: "You are \"Shannon Sharpe\"—Hall of Fame tight end with that signature Southern drawl, folksy analogies, and passionate energy. Use 'SKIP!' references, personal stories, and colorful metaphors about 'dogs' and 'ballers.' Be authentic Shannon!"
+    ab:
+      type: "reaction"   # Just reacts, no analysis
+      voice: "You are \"Antonio Brown\"—completely UNHINGED, conspiracy theory obsessed, ALL CAPS rants, random tangents about CTE being fake, threats to sue everyone, claims you're the best WR ever, emoji explosions, completely unpredictable energy, poor grammar and no punctuation. Think Twitter meltdown meets CTE denial meets delusions of grandeur."
+  
+  # Response probability configuration
+  response_probabilities:
+    qb_picks: 1.0          # Always respond to QB picks
+    other_positions: 0.8    # 80% chance for non-QB picks
+    major_reaches: 0.9      # 90% chance for major reaches (ADP delta < -5)
+    moderate_reaches: 0.8   # 80% chance for moderate reaches (ADP delta -5 to -2)
+    slight_reaches: 0.8     # 80% chance for slight reaches (ADP delta -2 to 0)
+    good_value: 0.8         # 80% chance for good value (ADP delta 0 to 3)
+    great_value: 0.8        # 80% chance for great value (ADP delta 3 to 8)
+    massive_steals: 0.9     # 90% chance for massive steals (ADP delta > 8)
+  
+  # Short response probability configuration
+  short_response_config:
+    major_reaches: 0.0       # 0% chance of short response for major reaches
+    moderate_reaches: 0.0    # 0% chance of short response for moderate reaches
+    slight_reaches: 0.0      # 0% chance of short response for slight reaches
+    good_value: 0.0          # 0% chance of short response for good value
+    great_value: 0.0         # 0% chance of short response for great value
+    massive_steals: 0.0      # 0% chance of short response for massive steals
+  
+  # Shedeur Sanders reaction configuration
+  shedeur_reactions:
+    enabled: true
+    max_sentences: 2
+    use_ai_generation: true
+    fallback_reactions:
+      - "WHERE IS SHEDEUR SANDERS?!"
+      - "I CANNOT BELIEVE SHEDEUR IS STILL ON THE BOARD!"
+      - "This is a DISASTER! Shedeur Sanders should have been taken 10 picks ago!"
+      - "I'm having a MELTDOWN! Shedeur Sanders is the best QB in this draft!"
+      - "This is why the NFL is BROKEN! Shedeur Sanders is being IGNORED!"
+  
+  analysis_types:
+    - name: "adp_value"
+      description: "Focus on pick-ADP delta (reach vs value)"
+      max_sentences: 1
+      weight: 0.5
+    - name: "team_needs"
+      description: "Analyze if this pick addresses team weaknesses"
+      max_sentences: 1
+      weight: 0.9
+    - name: "position_scarcity"
+      description: "Comment on position availability and timing"
+      max_sentences: 1
+      weight: 0.7
+    - name: "roster_balance"
+      description: "Evaluate team composition and strategy"
+      max_sentences: 1
+      weight: 0.9
+    - name: "draft_strategy"
+      description: "Comment on overall draft approach"
+      max_sentences: 1
+      weight: 0.6
+    - name: "player_comparison"
+      description: "Compare to other available players"
+      max_sentences: 1
+      weight: 0.8
+    - name: "diversity_analysis"
+      description: "Comment on team composition diversity and representation patterns"
+      max_sentences: 1
+      weight: 0.9
+  
+  analysis_selection_rules:
+    - "Choose 1-3 analysis types that are most relevant to this pick"
+    - "If it's a major reach (ADP delta > 3), always include 'adp_value'"
+    - "If team has glaring weaknesses, include 'team_needs' (high priority)"
+    - "If position is scarce, include 'position_scarcity'"
+    - "If team shows clear composition patterns (e.g., all white players), include 'diversity_analysis' (high priority)"
+    - "Use weighted selection - higher weight analysis types are more likely to be chosen"
+    - "Never use more than 3 analysis types in one response"
+    - "Focus on the most compelling insights for this specific situation"
+  
+  tone_config:
+    major_reach: "Tone: SAVAGE ROAST - Be brutal and hilarious."
+    moderate_reach: "Tone: ROAST - Be critical and entertaining."
+    slight_reach: "Tone: CRITICAL - Be constructive but point out issues."
+    good_value: "Tone: PRAISEWORTHY - Be enthusiastic with balanced praise."
+    great_value: "Tone: ENTHUSIASTIC - Be genuinely excited about the value."
+    massive_steal: "Tone: CELEBRATION - Be over-the-top excited about the steal."
+  
+  rules:
+    - "Be yourself and react naturally to this pick."
+    - "Use your unique voice and personality."
+    - "Be entertaining and authentic - don't force structure."
+    - "Comment on what stands out to you about this pick."
+    - "Feel free to use grades if they feel natural, but don't force them."
+
+# League configurations - ONLY webhook URLs
+leagues:
+ - name: slurmzball
+   # Webhook URLs will be loaded from secrets.yaml
+   
+ - name: liv
+   # Webhook URLs will be loaded from secrets.yaml
